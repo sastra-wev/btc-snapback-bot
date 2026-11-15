@@ -39,6 +39,13 @@ entry_price = None  # raw price the position cost, fees included, once it appear
 cooldown = 0
 
 
+def entry_price_of(state, symbol, holding):
+    """The raw price a position cost, fees included: the inverse of the shim's value()."""
+    s = state.symbols[symbol]
+    return holding.cost * 10 ** (s["qty_scale"] + s["price_scale"]) // (
+        holding.qty * 10 ** state.hello["capital"]["quote_scale"])
+
+
 def on_batch(state, batch):
     global bars_held, entry_price, cooldown
     symbol = next(iter(state.symbols))
@@ -51,12 +58,9 @@ def on_batch(state, batch):
         return []
 
     holding = state.positions.get(symbol)
-    if holding is not None:
+    if holding is not None and holding.qty > 0:
         if entry_price is None:
-            # Invert the shim's value(): price = cost * 10^(qty+price scales) / (qty * 10^quote scale).
-            s = state.symbols[symbol]
-            entry_price = holding.cost * 10 ** (s["qty_scale"] + s["price_scale"]) // (
-                holding.qty * 10 ** state.hello["capital"]["quote_scale"])
+            entry_price = entry_price_of(state, symbol, holding)
             bars_held = 0
         bars_held += 1
         if bars_held >= HOLD_MINUTES or close <= entry_price * (1 - STOP):
